@@ -12,7 +12,6 @@ confinement: strict # use 'strict' once you have the right plugs and slots
 apps:
   hello-gtk-frame:
     command-chain:
-      - bin/wayland-launch
       - env-setup
       - usr/local/bin/x11_kiosk_launch
     command:  usr/bin/mono $SNAP/usr/lib/hello/hello-world.exe
@@ -23,28 +22,7 @@ apps:
       - wayland
       - network-bind
 
-# This is one of four snippets that relate to providing the userspace graphics needed by your application.
-# You can treat this as "magic" so long as you don't need to make changes.
-# On the Mir discourse forum there's a lot more detail on [the graphics-core20 Snap interface](https://discourse.ubuntu.com/t/the-graphics-core20-snap-interface/23000) and it's use.
-plugs:
-  graphics-core20:
-    interface: content
-    target: $SNAP/graphics
-    default-provider: mesa-core20
-
 environment:
-  # This is one of four snippets that relate to providing the userspace graphics needed by your application.
-  LD_LIBRARY_PATH:    $SNAP/graphics/lib
-  LIBGL_DRIVERS_PATH: $SNAP/graphics/dri
-  LIBVA_DRIVERS_PATH: $SNAP/graphics/dri
-  __EGL_VENDOR_LIBRARY_DIRS: $SNAP/graphics/glvnd/egl_vendor.d
-  # Other, generally useful environment settings...
-  # XDG config
-  XDG_CACHE_HOME:  $SNAP_USER_COMMON/.cache
-  XDG_CONFIG_HOME: $SNAP_USER_DATA/.config
-  XDG_CONFIG_DIRS: $SNAP/etc/xdg
-  # XKB config
-  XKB_CONFIG_ROOT: $SNAP/usr/share/X11/xkb
   # Mono app
   MONO_GAC_PREFIX: "$SNAP/usr/lib/mono/gac"
   MONO_PATH: "$SNAP/usr/lib/cli/atk-sharp-2.0:$SNAP/usr/lib/cli/gdk-sharp-2.0:$SNAP/usr/lib/cli/glib-sharp-2.0:$SNAP/usr/lib/cli/gtk-dotnet-2.0:$SNAP/usr/lib/cli/gtk-sharp-2.0:$SNAP/usr/lib/cli/Mono.Addins-0.2:$SNAP/usr/lib/cli/Mono.Addins.CecilReflector-0.2:$SNAP/usr/lib/cli/Mono.Addins.Gui-0.2:$SNAP/usr/lib/cli/Mono.Addins.Setup-0.2:$SNAP/usr/lib/cli/pango-sharp-2.0"
@@ -54,13 +32,6 @@ environment:
 
 # The `layout` ensures that files can be found by applications where they are expected by the toolkit or application.
 layout:
-  # This is one of four snippets that relate to providing the userspace graphics needed by your application.
-  # These paths (/usr/share/libdrm and /usr/share/drirc.d) are hardcoded in mesa.
-  /usr/share/libdrm:  # Needed by mesa-core20 on AMD GPUs
-    bind: $SNAP/graphics/libdrm
-  /usr/share/drirc.d:  # Used by mesa-core20 for app specific workarounds
-    bind: $SNAP/graphics/drirc.d
-  # Other, generally useful paths
   /usr/share/X11:
     bind: $SNAP/usr/share/X11
   /usr/bin/xkbcomp:
@@ -120,43 +91,6 @@ parts:
       - mono-devel
       - gtk-sharp2
     stage-snaps: [mir-kiosk-x11]
-    override-prime: |
-      snapcraftctl prime
-      # We don't need the GL setup magic from mir-kiosk-x11 (we have our own)
-      rm -f "$SNAPCRAFT_PRIME/hacks/setup-gl"
-
-  # Some utility scripts for setting up the Wayland environment
-  wayland-launch:
-    plugin: dump
-    source: wayland-launch
-    override-build: |
-      # The plugs needed to run Wayland. (wayland-launch checks them, setup.sh connects them)
-      # You may add further plugs here if you want these options
-      PLUGS="opengl wayland graphics-core20"
-      sed --in-place "s/%PLUGS%/$PLUGS/g" $SNAPCRAFT_PART_BUILD/bin/wayland-launch
-      sed --in-place "s/%PLUGS%/$PLUGS/g" $SNAPCRAFT_PART_BUILD/bin/setup.sh
-      sed --in-place "s/%SNAP%/$SNAPCRAFT_PROJECT_NAME/g" $SNAPCRAFT_PART_BUILD/bin/wayland-launch
-      sed --in-place "s/%SNAP%/$SNAPCRAFT_PROJECT_NAME/g" $SNAPCRAFT_PART_BUILD/bin/setup.sh
-      snapcraftctl build
-    stage-packages:
-      - inotify-tools
-
-  # This is one of four snippets that relate to providing the userspace graphics needed by your application.
-  # This ensures that your snap doesn't contain its own copy of the userspace drivers
-  cleanup:
-    after:
-      - hello-gtk-frame
-      - wayland-launch
-    plugin: nil
-    build-snaps: [ mesa-core20 ]
-    override-prime: |
-      set -eux
-      cd /snap/mesa-core20/current/egl/lib
-      find . -type f,l -exec rm -f $SNAPCRAFT_PRIME/usr/lib/${SNAPCRAFT_ARCH_TRIPLET}/{} \;
-      rm -fr "$SNAPCRAFT_PRIME/usr/lib/${SNAPCRAFT_ARCH_TRIPLET}/dri"
-      for CRUFT in bug drirc.d glvnd libdrm lintian man; do
-        rm -rf "$SNAPCRAFT_PRIME/usr/share/$CRUFT"
-      done
 
 architectures:
   - build-on: amd64
